@@ -3,12 +3,33 @@ import Session from './session'
 import State from './state'
 import _symbol from './symbol'
 
-type WatcherDepManage = Map<Function,Map<Symbol,object>>
+type WatcherDepManage = Map<Function | String,Map<Symbol,object>>
 
 const collectionSession = new Session()
 
 const oldWatcherDepManage: WatcherDepManage = new Map()
 const curWatcherDepManage: WatcherDepManage = new Map()
+
+const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:State,key) => {
+    let depManage:Map<Symbol,object> | null
+    if((depManage = curWatcherDepManage.get(id))) {
+        let depRepo:object | null
+        if((depRepo = depManage.get(stateFlag))) depRepo[key] = true
+        else depManage.set(stateFlag,{
+            [_symbol.state]:state,
+            [key]: true
+        })
+    }
+
+    else curWatcherDepManage.set(id,new Map([
+        [stateFlag,{
+            [_symbol.state]:state,
+            [key]: true
+        }]
+    ]))
+}
+
+const createDepManage = (id:Symbol,payload:object) => new Map([[id,payload]])
 
 let transactionId = []
 let pending = false
@@ -17,14 +38,14 @@ const startTransaction = () => transactionId.length = 0
 const endTransaction = startTransaction
 
 const updateTask:IUpdateTask[] = []
-
+const isPlainObject = (obj:any) => obj && (typeof obj === 'object')
 
 const notify = () => {
     startTransaction()
     
     updateTask.forEach(task => {
         const id = task.id
-        clearAllDep(id)
+        // clearAllDep(id)
 
         const update = task.task
         if(!~transactionId.indexOf(id)) {
@@ -39,36 +60,43 @@ const notify = () => {
 
 const ReactiveStateProxy = (state:State) => {
     if(typeof state !== 'object') return state
-    if(state.origin !== state.state) return 
+    if(state.origin !== state.state) return state
 
     const origin = state.origin
-    const collectionFlag = state.flag
+    const innerState = state.state
+    const stateFlag = state[_symbol.flag] as Symbol
     
-    let proxyState = new Proxy(state,{
-        get(target,key){
+    let proxyState = new Proxy(origin,{
+        get(target,key:any){
             if(key === 'origin') return origin
+            if(key === _symbol.proxy2state) return state
+            // debugger;
 
             const currentSession = collectionSession.peer()
-            const currentDepWatchMap = state[_symbol.watchMap]
+            if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
-            const watcher = currentSession.build
+            const currentDepWatchMap = state[_symbol.watchMap] as WatcherMap
+            const watcher = currentSession.build.toString()
             const observer = currentSession.observer
-            currentDepWatchMap.set(watcher,observer)
+            if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Function | String,Function>([[watcher,currentSession.observer]])
+            else currentDepWatchMap[key].set(watcher,observer)
 
-            curWatcherDepManage.set(currentSession.build,new Map([
-                [collectionFlag,{
-                    [_symbol.state]:state,
-                    key: true
-                }]
-            ]))
+            addDepToWatcherManage(watcher,stateFlag,state,key)
+
+            if(isPlainObject(target[key])) return (innerState[key] = ReactiveStateProxy(innerState[key])).state
 
             return target[key]
         },
         set(target,key,val) {
+            // console.log(key,val)
+            if(origin[key] === val) return true
             target[key] = val
-            if(Object.prototype.toString.call(target) === '[object Array]') {}
-            else if(typeof target[key] === 'object' && target[key] !== null) {}
-            else selectWatcherInUpdatePool(state,key as string)
+
+            if(isPlainObject(target[key])) {
+                // console.log('this')
+            }
+            // TODO: 数组特殊处理
+            selectWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
 
             if(!pending) {
                 pendingUpdate()
@@ -80,23 +108,21 @@ const ReactiveStateProxy = (state:State) => {
     })
 
     state.state = proxyState
-    return proxyState
+    return state
 }
 
 const beforeCollection = (payload:ICollectionPayload) => {
     collectionSession.push(payload)
 }
 
-const endCollection = () => {
-    collectionSession.pop()
-}
+const endCollection = () => collectionSession.pop()
 
 const beginCollection = (build:Function) => {
-    build()
+    return build()
 }
 
-function clearDep(watcher:Function,state:State) {
-    const stateFlag = state.flag
+function clearDep(watcher:Function | String,state:State) {
+    const stateFlag = state[_symbol.flag] as Symbol
     const getDepMap = (type:string) => {
         let watchDepManage = type === 'cur' ? curWatcherDepManage : oldWatcherDepManage
         return watchDepManage.get(watcher).get(stateFlag)
@@ -105,16 +131,24 @@ function clearDep(watcher:Function,state:State) {
     const curDepMap = getDepMap('cur')
     const oldDepMap = getDepMap('old')
     
-    for(let name in curDepMap) {
-        if(!oldDepMap[name]) delete state[_symbol.watchMap][watcher]
+    // debugger;
+    for(let name in oldDepMap) {
+        if(!curDepMap[name]) {
+            delete state[_symbol.watchMap][name]
+        }
     }
 
-    oldWatcherDepManage.set(watcher,curWatcherDepManage.get(watcher))
+    oldWatcherDepManage.get(watcher).set(stateFlag,curWatcherDepManage.get(watcher).get(stateFlag))
+
 }
 
-function clearAllDep(watcher:Function) {
+function clearAllDep(watcher:Function | String) {
     let depStates = oldWatcherDepManage.get(watcher)
-    for(let state of depStates) clearDep(watcher,state[_symbol.state] as State)
+   
+    if(depStates) for(let state of depStates) clearDep(watcher,state[1][_symbol.state] as State)
+    else oldWatcherDepManage.set(watcher,curWatcherDepManage.get(watcher))
+    
+    curWatcherDepManage.set(watcher,null)
 }
 
 function pendingUpdate() {
@@ -125,17 +159,19 @@ function endPendingUpdate() {
     pending = false
 }
 
-function selectWatcherInUpdatePool(state:State,name:string) {
+function selectWatcherInUpdatePool(state:State,name?:string) {
     const watchers = state[_symbol.watchMap] as WatcherMap
     for(const key in watchers) {
-        if(key === name) {
-            const keyWatchers = watchers[name]
+        if(key === name || !name) {
+            const keyWatchers = watchers[key]
             keyWatchers.forEach((observer,id) => updateTask.push({task:observer,id}))
         }
     }
 }
 
 export const collectionDep = (build:Function,state:State | State[],observer ?: Function) => {
+    state = linkStateToProxy(state)
+
     beforeCollection({
         build,
         observer:observer ? observer : build
@@ -144,8 +180,23 @@ export const collectionDep = (build:Function,state:State | State[],observer ?: F
         for(let _state of state) ReactiveStateProxy(_state)
     }
     else ReactiveStateProxy(state as State)
-    beginCollection(build)
+
+    // debugger;
+    const ret = beginCollection(() => build(state))
     endCollection()
+    
+    clearAllDep(build.toString())
+    return ret
+}
+
+export const linkStateToProxy = (state: State | State[]) => {
+    if(Array.isArray(state)) {
+        return state.map(_state => {
+            const ret = ReactiveStateProxy(_state)
+            return ret
+        })
+    }
+    return ReactiveStateProxy(state as State)
 }
 
 

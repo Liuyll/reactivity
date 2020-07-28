@@ -1,3 +1,4 @@
+
 import State from './state'
 
 export interface ICollectionPayload {
@@ -6,10 +7,15 @@ export interface ICollectionPayload {
 }
 
 export interface IUpdateTask {
-    id: Function,
+    // toString id
+    id: Function | String,
     task: Function
 }
 
+/**
+ * key: keyName 
+ * val: {buildId,observer}
+ */
 export interface WatcherMap {
-    [key:string]:Map<Function,Function>
+    [key:string]:Map<Function | String,Function>
 }
