@@ -1,4 +1,4 @@
-import { ICollectionPayload, IUpdateTask, WatcherMap } from './interface';
+import { ICollectionPayload, IUpdateTask, WatcherMap,IWatcherPayload } from './interface';
 import Session from './session'
 import State from './state'
 import _symbol from './symbol'
@@ -29,6 +29,7 @@ const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:Sta
     ]))
 }
 
+const makeId = (type:Function) => type.toString()
 const createDepManage = (id:Symbol,payload:object) => new Map([[id,payload]])
 
 let transactionId = []
@@ -46,11 +47,12 @@ const notify = () => {
     updateTask.forEach(task => {
         const id = task.id
         // clearAllDep(id)
-
         const update = task.task
+        const resolve = task.resolve
+
         if(!~transactionId.indexOf(id)) {
             transactionId.push(task.id)
-            update()
+            beginCollection(update,{resolve} as ICollectionPayload)
         }
     })
 
@@ -76,10 +78,10 @@ const ReactiveStateProxy = (state:State) => {
             if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
             const currentDepWatchMap = state[_symbol.watchMap] as WatcherMap
-            const watcher = currentSession.build.toString()
-            const observer = currentSession.observer
-            if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Function | String,Function>([[watcher,currentSession.observer]])
-            else currentDepWatchMap[key].set(watcher,observer)
+            const watcher = makeId(currentSession.build)
+            const watcherPayload:IWatcherPayload = {observer:currentSession.observer,resolve:currentSession.resolve}
+            if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Function | String,IWatcherPayload>([[watcher,watcherPayload]])
+            else currentDepWatchMap[key].set(watcher,watcherPayload)
 
             addDepToWatcherManage(watcher,stateFlag,state,key)
 
@@ -91,10 +93,6 @@ const ReactiveStateProxy = (state:State) => {
             // console.log(key,val)
             if(origin[key] === val) return true
             target[key] = val
-
-            if(isPlainObject(target[key])) {
-                // console.log('this')
-            }
             // TODO: 数组特殊处理
             selectWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
 
@@ -102,6 +100,7 @@ const ReactiveStateProxy = (state:State) => {
                 pendingUpdate()
                 queueMicrotask(notify)
             }
+            state.onchange()
 
             return true
         }
@@ -117,8 +116,10 @@ const beforeCollection = (payload:ICollectionPayload) => {
 
 const endCollection = () => collectionSession.pop()
 
-const beginCollection = (build:Function) => {
-    return build()
+const beginCollection = (build:Function,collectionPayload:ICollectionPayload) => {
+    const resolve = build()
+    collectionPayload.resolve = resolve
+    return resolve
 }
 
 function clearDep(watcher:Function | String,state:State) {
@@ -164,28 +165,29 @@ function selectWatcherInUpdatePool(state:State,name?:string) {
     for(const key in watchers) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
-            keyWatchers.forEach((observer,id) => updateTask.push({task:observer,id}))
+            keyWatchers.forEach((watcher:IWatcherPayload,id) => updateTask.push({task:watcher.observer,id,resolve:watcher.resolve}))
         }
     }
 }
 
 export const collectionDep = (build:Function,state:State | State[],observer ?: Function) => {
+    let resolve
     state = linkStateToProxy(state)
-
-    beforeCollection({
+    const collectionPayload = {
         build,
-        observer:observer ? observer : build
-    })
-    if(Array.isArray(state)) {
-        for(let _state of state) ReactiveStateProxy(_state)
+        observer:observer ? observer : build,
+        resolve
     }
+    
+    beforeCollection(collectionPayload)
+    if(Array.isArray(state)) for(let _state of state) ReactiveStateProxy(_state) 
     else ReactiveStateProxy(state as State)
 
     // debugger;
-    const ret = beginCollection(() => build(state))
+    const ret = beginCollection(() => build(state),collectionPayload)
     endCollection()
     
-    clearAllDep(build.toString())
+    clearAllDep(makeId(build))
     return ret
 }
 

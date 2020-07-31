@@ -1,7 +1,8 @@
+import { isRegisterDom } from './../config';
 import { rootState } from './createState';
 import { useForceUpdate } from './hooks' 
 import State from '../reactivity/state'
-import { collectionDep,linkStateToProxy } from '../reactivity'
+import { collectionDep } from '../reactivity'
 
 export default function mixInReact(React:any) {
     const createElement = React.createElement
@@ -25,6 +26,7 @@ export default function mixInReact(React:any) {
 function createUpdateContainer(state:State | State[],h:Function | String,React:any) {
     if(typeof h !== 'function') return h
     const build = h
+    const { memo } = React
     
     const typeFunc = (props:object,children ?: Array<Function>) => {
         const buildCurry = (curState) => {
@@ -40,9 +42,11 @@ function createUpdateContainer(state:State | State[],h:Function | String,React:a
         // const v = React.useMemo(() => collectionDep(buildCurry,state,forceUpdate))
         setStringId(buildCurry,h.toString())
         return collectionDep(buildCurry,state,forceUpdate)
-    }   
+    } 
+    
+    if(isRegisterDom) typeFunc.__rawTypeFn = h.toString()
 
-    return typeFunc
+    return memo ? memo(typeFunc) : typeFunc
 }
 
 function setStringId(target:Function,id:string) {
