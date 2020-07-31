@@ -1,5 +1,5 @@
 {
-  "name": "statelink",
+  "name": "@limbo/reactivity",
   "main": "lib",
   "scripts": {
     "build": "tsc"

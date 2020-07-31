@@ -1,15 +1,14 @@
-import { ICollectionPayload, IUpdateTask, WatcherMap,IWatcherPayload } from './interface';
+import { ICollectionPayload, IUpdateTask, IWatcherMap,IWatcherPayload,WatcherDepManage } from './interface';
 import Session from './session'
 import State from './state'
 import _symbol from './symbol'
 
-type WatcherDepManage = Map<Function | String,Map<Symbol,object>>
-
 const collectionSession = new Session()
-
+const currentTaskPool = new Set()
 const oldWatcherDepManage: WatcherDepManage = new Map()
 const curWatcherDepManage: WatcherDepManage = new Map()
 
+const clearTaskPool = () => currentTaskPool.clear()
 const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:State,key) => {
     let depManage:Map<Symbol,object> | null
     if((depManage = curWatcherDepManage.get(id))) {
@@ -46,7 +45,6 @@ const notify = () => {
     
     updateTask.forEach(task => {
         const id = task.id
-        // clearAllDep(id)
         const update = task.task
         const resolve = task.resolve
 
@@ -58,6 +56,7 @@ const notify = () => {
 
     endTransaction()
     endPendingUpdate()
+    clearTaskPool()
 }
 
 const ReactiveStateProxy = (state:State) => {
@@ -77,7 +76,7 @@ const ReactiveStateProxy = (state:State) => {
             const currentSession = collectionSession.peer()
             if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
-            const currentDepWatchMap = state[_symbol.watchMap] as WatcherMap
+            const currentDepWatchMap = state[_symbol.watchMap] as IWatcherMap
             const watcher = makeId(currentSession.build)
             const watcherPayload:IWatcherPayload = {observer:currentSession.observer,resolve:currentSession.resolve}
             if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Function | String,IWatcherPayload>([[watcher,watcherPayload]])
@@ -95,13 +94,11 @@ const ReactiveStateProxy = (state:State) => {
             target[key] = val
             // TODO: 数组特殊处理
             selectWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
-
             if(!pending) {
                 pendingUpdate()
                 queueMicrotask(notify)
             }
             state.onchange()
-
             return true
         }
     })
@@ -152,20 +149,19 @@ function clearAllDep(watcher:Function | String) {
     curWatcherDepManage.set(watcher,null)
 }
 
-function pendingUpdate() {
-    pending = true
-}
+function pendingUpdate() { pending = true }
 
-function endPendingUpdate() {
-    pending = false
-}
+function endPendingUpdate() { pending = false }
 
 function selectWatcherInUpdatePool(state:State,name?:string) {
-    const watchers = state[_symbol.watchMap] as WatcherMap
+    const watchers = state[_symbol.watchMap] as IWatcherMap
     for(const key in watchers) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
-            keyWatchers.forEach((watcher:IWatcherPayload,id) => updateTask.push({task:watcher.observer,id,resolve:watcher.resolve}))
+            keyWatchers.forEach((watcher:IWatcherPayload,id) => {
+                updateTask.push({task:watcher.observer,id,resolve:watcher.resolve})
+                currentTaskPool.add(id)
+            })
         }
     }
 }

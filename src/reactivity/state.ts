@@ -1,4 +1,4 @@
-import { WatcherMap } from './interface'
+import { IWatcherMap } from './interface'
 import _Symbol from './symbol'
 
 interface IStateOptions {
@@ -6,7 +6,7 @@ interface IStateOptions {
     onchange ?: Function
 }
 export default class State {
-    private _watchMap : WatcherMap = {}
+    private _watchMap : IWatcherMap = {}
     private _flag:Symbol = Symbol()
     private _parentState:State
     private _onchange: Function | null
