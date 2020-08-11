@@ -1,0 +1,11 @@
+{
+  "name": "@limbo/reactivity",
+  "main": "lib",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "webpack": "^4.43.0"
+  }
+}
