@@ -1,19 +1,15 @@
 import React from 'react'
 import ReactDOM from 'react-dom'
-import { mixInReact,createState,setRootState } from '../src'
+import { mixInReact, createRef } from '../src'
 
 mixInReact(React)
 
-const State = createState({
-    a:1,
-    b:2
-})
-
-setRootState(State)
-
+const State = createRef(1)
 function App(props) {
     return (
-        <div>{props.rootState.a}</div>
+        <div>
+            <div onClick={() => State.value++}>{State.value}</div>
+        </div>
     )
 }
 

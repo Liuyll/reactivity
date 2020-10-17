@@ -1,6 +1,6 @@
 {
   "name": "@limbo/reactivity",
-  "main": "lib",
+  "main": "src",
   "scripts": {
     "build": "tsc"
   },

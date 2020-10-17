@@ -9,6 +9,7 @@ function registerDom() {
     setRegisterDom(true)
 }
 
+export { createRef } from './reactivity'
 export {
     mixInReact,
     createState,

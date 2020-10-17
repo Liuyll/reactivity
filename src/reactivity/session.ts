@@ -25,4 +25,8 @@ export default class Session implements ISession {
     peer() {
         return this.stack[this.stack.length - 1]
     }
+
+    isCollecting() {
+        return this.stack.length !== 0
+    }
 }

@@ -1,8 +1,10 @@
-import { ICollectionPayload, IUpdateTask, IWatcherMap,IWatcherPayload,WatcherDepManage } from './interface';
+import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherDepManage, PlainType } from './interface';
 import Session from './session'
 import State from './state'
 import _symbol from './symbol'
+import React = require('react')
 
+let realReact:React
 const collectionSession = new Session()
 const currentTaskPool = new Set()
 const oldWatcherDepManage: WatcherDepManage = new Map()
@@ -110,9 +112,7 @@ const ReactiveStateProxy = (state:State) => {
 const beforeCollection = (payload:ICollectionPayload) => {
     collectionSession.push(payload)
 }
-
 const endCollection = () => collectionSession.pop()
-
 const beginCollection = (build:Function,collectionPayload:ICollectionPayload) => {
     const resolve = build()
     collectionPayload.resolve = resolve
@@ -150,7 +150,6 @@ function clearAllDep(watcher:Function | String) {
 }
 
 function pendingUpdate() { pending = true }
-
 function endPendingUpdate() { pending = false }
 
 function selectWatcherInUpdatePool(state:State,name?:string) {
@@ -166,6 +165,7 @@ function selectWatcherInUpdatePool(state:State,name?:string) {
     }
 }
 
+export const setRealReact = (React:React) => realReact = React
 export const collectionDep = (build:Function,state:State | State[],observer ?: Function) => {
     let resolve
     state = linkStateToProxy(state)
@@ -197,7 +197,21 @@ export const linkStateToProxy = (state: State | State[]) => {
     return ReactiveStateProxy(state as State)
 }
 
+// TODO: Ref general
+export const createRef = (val:PlainType) => {
+    const state = createState({
+        value:val
+    })
+    return linkStateToProxy(state)
+}
 
-export const createState = (target:object) => new State(target)
+export const createState = (target:object) => {
+    const state = new State(target)
+    if(collectionSession.isCollecting()) {
+        const reactivityState =linkStateToProxy(state)
+        return realReact.useRef(reactivityState).current
+    }
+    return state
+}
 
 

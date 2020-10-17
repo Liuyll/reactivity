@@ -14,7 +14,6 @@ export default class State {
     public origin
     public state
 
-
     constructor(state,options?:IStateOptions) {
         this.state = state
         this.origin = state
