@@ -28,7 +28,7 @@ export interface IWatcherPayload {
 }
 
 export type WatcherDepManage = Map<Function | String,Map<Symbol,object>>
-export type PlainType = String | Boolean | Number
-export type Ref = {
-    value: PlainType
+export type PlainType = string | boolean | number | bigint
+export type Ref<T extends PlainType> = {
+    value: T
 }

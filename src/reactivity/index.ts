@@ -1,4 +1,4 @@
-import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherDepManage, PlainType } from './interface';
+import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherDepManage, PlainType, Ref } from './interface';
 import Session from './session'
 import State from './state'
 import _symbol from './symbol'
@@ -197,18 +197,17 @@ export const linkStateToProxy = (state: State | State[]) => {
     return ReactiveStateProxy(state as State)
 }
 
-// TODO: Ref general
-export const createRef = (val:PlainType) => {
+export const createRef = <T extends PlainType = PlainType> (val:T):Ref<T> => {
     const state = createState({
         value:val
     })
-    return linkStateToProxy(state)
+    return (linkStateToProxy(state) as State).state
 }
 
-export const createState = (target:object) => {
+export const createState = (target:object):State => {
     const state = new State(target)
     if(collectionSession.isCollecting()) {
-        const reactivityState =linkStateToProxy(state)
+        const reactivityState = linkStateToProxy(state)
         return realReact.useRef(reactivityState).current
     }
     return state
