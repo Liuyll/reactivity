@@ -3,7 +3,8 @@ type Resolve = any
 export interface ICollectionPayload {
     build: Function,
     observer: Function,
-    resolve ?: Resolve
+    resolve ?: Resolve,
+    cacheFunc ?: Function
 }
 
 export interface IUpdateTask {
@@ -24,7 +25,9 @@ export interface IWatcherMap {
 
 export interface IWatcherPayload {
     observer: Function,
-    resolve: Resolve
+    resolve: Resolve,
+    build ?: Function,
+    cacheFunc ?: Function
 }
 
 export type WatcherDepManage = Map<Function | String,Map<Symbol,object>>

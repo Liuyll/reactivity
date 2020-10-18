@@ -3,12 +3,14 @@ import Session from './session'
 import State from './state'
 import _symbol from './symbol'
 import React = require('react')
+import { setCurrentWaitingUpdateComp,clearCurrentWaitingUpdateComp,currentWaitingUpdateComp } from '../mixInReact/mixInReact'
 
 let realReact:React
 const collectionSession = new Session()
 const currentTaskPool = new Set()
 const oldWatcherDepManage: WatcherDepManage = new Map()
 const curWatcherDepManage: WatcherDepManage = new Map()
+const LIMBO_MAGIC_NUMBER = '$limbo_magic_number'
 
 const noop = () => {}
 const clearTaskPool = () => currentTaskPool.clear()
@@ -31,6 +33,7 @@ const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:Sta
     ]))
 }
 
+const buildMagicHashString = (watcherHash:string,order:number):string => watcherHash + LIMBO_MAGIC_NUMBER + order
 const makeId = (type:Function) => type.toString()
 // @deprecated
 const createDepManage = (id:Symbol,payload:object) => new Map([[id,payload]])
@@ -61,6 +64,7 @@ const flush = () => {
     endTransaction()
     endPendingUpdate()
     clearTaskPool()
+    clearCurrentWaitingUpdateComp()
 }
 
 const ReactiveStateProxy = (state:State) => {
@@ -78,11 +82,27 @@ const ReactiveStateProxy = (state:State) => {
             const currentSession = collectionSession.peer()
             if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
+            // 持有这个依赖的watcherMap
             const currentDepWatchMap = state[_symbol.watchMap] as IWatcherMap
             const watcher = makeId(currentSession.build)
-            const watcherPayload:IWatcherPayload = {observer:currentSession.observer,resolve:currentSession.resolve}
+            const watcherPayload:IWatcherPayload = {
+                observer:currentSession.observer,resolve:currentSession.resolve,build:currentSession.build,cacheFunc:currentSession.cacheFunc
+            }
+            /**
+             * string为id的watcher可能被多个相同组件覆盖
+             * 此时添加magic数字标识相同组件的不同调用
+             * 最终需要在每轮更新后清除掉对应的currentDepWatchMap
+             */
             if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Function | String,IWatcherPayload>([[watcher,watcherPayload]])
-            else currentDepWatchMap[key].set(watcher,watcherPayload)
+            else {
+                let maybeWatcherHash = watcher,
+                    maybeOrder = 1
+                while(currentDepWatchMap[key].get(maybeWatcherHash)) {
+                    maybeWatcherHash = buildMagicHashString(watcher,maybeOrder)
+                    maybeOrder++
+                }
+                currentDepWatchMap[key].set(maybeWatcherHash,watcherPayload)
+            }
 
             addDepToWatcherManage(watcher,stateFlag,state,key)
             if(isPlainObject(target[key])) return (innerState[key] = ReactiveStateProxy(innerState[key])).state
@@ -100,7 +120,7 @@ const ReactiveStateProxy = (state:State) => {
                 if(queueMicrotask) queueMicrotask(flush)
                 else Promise.resolve().then(() => flush())
             }
-            // debugger;
+  
             state.onchange()
             return true
         }
@@ -129,15 +149,13 @@ function clearDep(watcher:Function | String,state:State) {
 
     const curDepMap = getDepMap('cur')
     const oldDepMap = getDepMap('old')
-    
     // debugger;
     for(let name in oldDepMap) {
         if(!curDepMap[name]) {
             delete state[_symbol.watchMap][name]
-        }
+        } 
     }
     oldWatcherDepManage.get(watcher).set(stateFlag,curWatcherDepManage.get(watcher).get(stateFlag))
-
 }
 
 function clearAllDep(watcher:Function | String) {
@@ -155,34 +173,33 @@ function endPendingUpdate() { pending = false }
 function enqueueWatcherInUpdatePool(state:State, name?:string) {
     const watchers = state[_symbol.watchMap] as IWatcherMap
     let isRootUpdate = true
+    // debugger;
     for(const key in watchers) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
             keyWatchers.forEach((watcher:IWatcherPayload,id) => {
-                updateTask.push({task: isRootUpdate ? watcher.observer : noop, id,resolve:watcher.resolve})
+                setCurrentWaitingUpdateComp(watcher.cacheFunc)
+                updateTask.push({task: watcher.observer, id,resolve:watcher.resolve})
                 currentTaskPool.add(id)
                 isRootUpdate && (isRootUpdate = false)
             })
+            watchers[key] = new Map()
         }
     }
 }
 
 export const setRealReact = (React:React) => realReact = React
-export const collectionDep = (build:Function,state:State | State[],observer ?: Function) => {
+export const collectionDep = (build:Function,state:State | State[],observer ?: Function, cacheFunc ?: Function) => {
     let resolve
     state = linkStateToProxy(state)
-    const collectionPayload = {
+    const collectionPayload:ICollectionPayload = {
         build,
         observer:observer ? observer : build,
-        resolve
+        resolve,
+        cacheFunc
     }
     
     beforeCollection(collectionPayload)
-    // @depreacated 
-    // 与linkStateToProxy重复
-    // if(Array.isArray(state)) for(let _state of state) ReactiveStateProxy(_state) 
-    // else ReactiveStateProxy(state as State)
-
     // debugger;
     const ret = beginCollection(() => build(state),collectionPayload)
     endCollection()
@@ -216,4 +233,10 @@ export const createState = (target:object):State => {
     return state
 }
 
+export function exposeDebugVariable() {
+    globalThis.depMap = {
+        cur: curWatcherDepManage,
+        old: oldWatcherDepManage,
+    }
+}
 

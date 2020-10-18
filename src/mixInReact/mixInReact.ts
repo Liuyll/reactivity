@@ -3,25 +3,36 @@ import { rootState } from './createState';
 import { useForceUpdate } from './hooks' 
 import State from '../reactivity/state'
 import { collectionDep, setRealReact } from '../reactivity'
+import { shallowEqual } from '../dom/tools'
 
 interface RCTCompType {
     $$typeof: Symbol,
-    type: Function | string
+    type: Function
 }
 
 function isRCTCompType(comp:Function | string | RCTCompType): comp is RCTCompType {
     return !!(comp as RCTCompType).$$typeof
 }
+
+export const currentWaitingUpdateComp:Map<Function,boolean> = new Map()
+const containerMap = new WeakMap()
+
+export function setCurrentWaitingUpdateComp(h:Function) {
+    currentWaitingUpdateComp.set(h,true)
+}
+
+export function clearCurrentWaitingUpdateComp() {
+    currentWaitingUpdateComp.clear()
+}
+
 export default function mixInReact(React:any) {
     setRealReact(React)
     const createElement = React.createElement
     React.createElement = (h:Function | string | RCTCompType,props:object,...children:Function[] | String[]) => {
-        // console.log('update:',h)
         // 兼容生产情况下,props为null的问题
         if(!props) props = {}
         if(typeof h === 'function') props['rootState'] = rootState
 
-        // let states = [...rootState ? [rootState] : []]
         const states = []
         for(const key in props) {
             const prop = props[key]
@@ -36,24 +47,41 @@ export default function mixInReact(React:any) {
             updateContainer = h
         } else updateContainer = createUpdateContainer(states,h as (Function | string),React)
         
-        // if(React.memo) updateContainer = React.memo(updateContainer)
+        /**
+         * @param h typefunc
+         * 更新策略是:
+         * 依赖性更新，对应组件必须强制更新。但此时父组件不要再走react的逻辑更新依赖性更新的子组件，
+         * 由依赖性更新的子组件调用forceupdate自行更新，避免导致多次更新同一组件
+         */
+        const ignoreRedundancyUpdate = (h:Function) => {
+            return () => {
+                if(currentWaitingUpdateComp.get(h)) return true
+                return shallowEqual
+            } 
+        }
+
+        if(typeof h !== 'string' && typeof updateContainer !== 'string') {
+            if(containerMap.get(h)) updateContainer = containerMap.get(h)
+            else if(React.memo) {
+                const rawUpdateContainer:Function = isRCTCompType(updateContainer) ? updateContainer.type : updateContainer
+                if(isRCTCompType(updateContainer)) updateContainer.type = React.memo(updateContainer.type,ignoreRedundancyUpdate(rawUpdateContainer)) 
+                updateContainer = React.memo(updateContainer,ignoreRedundancyUpdate(rawUpdateContainer))
+                containerMap.set(h,updateContainer)
+            }
+        }
+        
         return createElement.apply(React,[updateContainer,props,...children])
     }
 }
  
-function createUpdateContainer(state:State | State[],h:Function | string,React:any) {
+function createUpdateContainer<T=Function | string>(state:State | State[],h:T,React:any):T {
     if(typeof h !== 'function') return h
     const build = h
-    const { memo } = React
     
     const typeFunc = (props:object,children ?: Array<Function>) => {
+        // console.log('update:',h)
         const buildCurry = (curState) => {
-            // React.useEffect(() => {
-            //     console.log('start')
-            //     return () => {
-            //         console.log('end')
-            //     }
-            // },[])
+            // React.useEffect(() => {},[])
 
             let i = 0
             const newProps = {}
@@ -68,12 +96,11 @@ function createUpdateContainer(state:State | State[],h:Function | string,React:a
 
         const forceUpdate = useForceUpdate(React)
         setStringId(buildCurry,h.toString())
-        return collectionDep(buildCurry,state,forceUpdate)
+        return collectionDep(buildCurry,state,forceUpdate,typeFunc)
     } 
     
     if(isRegisterDom) typeFunc.__rawTypeFn = h.toString()
-    // return memo ? memo(typeFunc) : typeFunc
-    return typeFunc as Function
+    return typeFunc as any
 }
 
 function setStringId(target:Function,id:string) {
