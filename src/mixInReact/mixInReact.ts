@@ -6,7 +6,7 @@ import { collectionDep, setRealReact } from '../reactivity'
 
 interface RCTCompType {
     $$typeof: Symbol,
-    type: Function
+    type: Function | string
 }
 
 function isRCTCompType(comp:Function | string | RCTCompType): comp is RCTCompType {
@@ -16,6 +16,7 @@ export default function mixInReact(React:any) {
     setRealReact(React)
     const createElement = React.createElement
     React.createElement = (h:Function | string | RCTCompType,props:object,...children:Function[] | String[]) => {
+        // console.log('update:',h)
         // 兼容生产情况下,props为null的问题
         if(!props) props = {}
         if(typeof h === 'function') props['rootState'] = rootState
@@ -35,6 +36,7 @@ export default function mixInReact(React:any) {
             updateContainer = h
         } else updateContainer = createUpdateContainer(states,h as (Function | string),React)
         
+        // if(React.memo) updateContainer = React.memo(updateContainer)
         return createElement.apply(React,[updateContainer,props,...children])
     }
 }
@@ -65,13 +67,13 @@ function createUpdateContainer(state:State | State[],h:Function | string,React:a
         }
 
         const forceUpdate = useForceUpdate(React)
-        // const v = React.useMemo(() => collectionDep(buildCurry,state,forceUpdate))
         setStringId(buildCurry,h.toString())
         return collectionDep(buildCurry,state,forceUpdate)
     } 
     
     if(isRegisterDom) typeFunc.__rawTypeFn = h.toString()
-    return memo ? memo(typeFunc) : typeFunc
+    // return memo ? memo(typeFunc) : typeFunc
+    return typeFunc as Function
 }
 
 function setStringId(target:Function,id:string) {

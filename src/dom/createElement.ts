@@ -13,7 +13,8 @@ export function createElement(type:Function | string,props:IProps,...children : 
 
     const element:IElement = {
         type,
-        props
+        props,
+        $$limbo_typeof: Symbol()
     }
 
     return element
@@ -28,9 +29,10 @@ function createTextElement(content:string) {
 }
 
 export interface IElement {
-    type: Function | String,
+    type: Function | String
     props: IProps
     isText ?: boolean
+    $$limbo_typeof ?: Symbol
 }
 
 export interface IProps {

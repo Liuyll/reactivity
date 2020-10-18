@@ -10,6 +10,7 @@ const currentTaskPool = new Set()
 const oldWatcherDepManage: WatcherDepManage = new Map()
 const curWatcherDepManage: WatcherDepManage = new Map()
 
+const noop = () => {}
 const clearTaskPool = () => currentTaskPool.clear()
 const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:State,key) => {
     let depManage:Map<Symbol,object> | null
@@ -31,6 +32,7 @@ const addDepToWatcherManage = (id: String | Function, stateFlag:Symbol,state:Sta
 }
 
 const makeId = (type:Function) => type.toString()
+// @deprecated
 const createDepManage = (id:Symbol,payload:object) => new Map([[id,payload]])
 
 let transactionId = []
@@ -42,7 +44,7 @@ const endTransaction = startTransaction
 const updateTask:IUpdateTask[] = []
 const isPlainObject = (obj:any) => obj && (typeof obj === 'object')
 
-const notify = () => {
+const flush = () => {
     startTransaction()
     
     updateTask.forEach(task => {
@@ -73,8 +75,6 @@ const ReactiveStateProxy = (state:State) => {
         get(target,key:any){
             if(key === 'origin') return origin
             if(key === _symbol.proxy2state) return state
-            // debugger;
-
             const currentSession = collectionSession.peer()
             if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
@@ -85,21 +85,22 @@ const ReactiveStateProxy = (state:State) => {
             else currentDepWatchMap[key].set(watcher,watcherPayload)
 
             addDepToWatcherManage(watcher,stateFlag,state,key)
-
             if(isPlainObject(target[key])) return (innerState[key] = ReactiveStateProxy(innerState[key])).state
 
             return target[key]
         },
         set(target,key,val) {
-            // console.log(key,val)
+            // debugger;
             if(origin[key] === val) return true
             target[key] = val
             // TODO: 数组特殊处理
-            selectWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
+            enqueueWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
             if(!pending) {
                 pendingUpdate()
-                queueMicrotask(notify)
+                if(queueMicrotask) queueMicrotask(flush)
+                else Promise.resolve().then(() => flush())
             }
+            // debugger;
             state.onchange()
             return true
         }
@@ -135,7 +136,6 @@ function clearDep(watcher:Function | String,state:State) {
             delete state[_symbol.watchMap][name]
         }
     }
-
     oldWatcherDepManage.get(watcher).set(stateFlag,curWatcherDepManage.get(watcher).get(stateFlag))
 
 }
@@ -152,14 +152,16 @@ function clearAllDep(watcher:Function | String) {
 function pendingUpdate() { pending = true }
 function endPendingUpdate() { pending = false }
 
-function selectWatcherInUpdatePool(state:State,name?:string) {
+function enqueueWatcherInUpdatePool(state:State, name?:string) {
     const watchers = state[_symbol.watchMap] as IWatcherMap
+    let isRootUpdate = true
     for(const key in watchers) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
             keyWatchers.forEach((watcher:IWatcherPayload,id) => {
-                updateTask.push({task:watcher.observer,id,resolve:watcher.resolve})
+                updateTask.push({task: isRootUpdate ? watcher.observer : noop, id,resolve:watcher.resolve})
                 currentTaskPool.add(id)
+                isRootUpdate && (isRootUpdate = false)
             })
         }
     }
@@ -176,13 +178,14 @@ export const collectionDep = (build:Function,state:State | State[],observer ?: F
     }
     
     beforeCollection(collectionPayload)
-    if(Array.isArray(state)) for(let _state of state) ReactiveStateProxy(_state) 
-    else ReactiveStateProxy(state as State)
+    // @depreacated 
+    // 与linkStateToProxy重复
+    // if(Array.isArray(state)) for(let _state of state) ReactiveStateProxy(_state) 
+    // else ReactiveStateProxy(state as State)
 
     // debugger;
     const ret = beginCollection(() => build(state),collectionPayload)
     endCollection()
-    
     clearAllDep(makeId(build))
     return ret
 }
