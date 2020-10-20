@@ -52,6 +52,48 @@ setRootState(
 事实上,`createState`注册了一个`reactivity`概念上的`State`,然后通过
 `setRootState`将它注册到`rootState`上.
 
+### createRef
+当然，如果你想像`vue3`一样创建一个单值属性，你也可以使用`createRef`
+
+注意，你需要使用`value`来访问它。具体的，你可以参考`call by value`和`call by reference`的区别。
+```
+function App() {
+    const ref = createRef(1)
+    useEffect(() => {
+        console.log(ref.value)
+    })
+    return <Son state={ref}/>
+}
+```
+
+### createWatcher
+作为响应式框架，`watcher`应该是很常见的功能。
+它随着一个响应式变量的更新而触发提前定义好的响应操作。
+```
+function App() {
+    const state = createState({
+        userId: 'init'
+    })
+    const watch = createWatcher(state,'userId',(newState,oldId,newId) => {
+        localStorage.setItem('id',newId)
+    })
+}
+```
+`createWatcher`的签名如下：
+```
+watcher:(state:State,key:any,onChange:IOnChange)
+IOnChange:(newState: object, oldValue ?: any, newValue ?: any, changeKey ?: any) => void
+```
+
+### createCompued
+同时,`reactivity`提供了计算功能，你可以像任何响应式框架(`vue`,`mobx`)一样使用`computed`
+```
+function App(props) {
+    const computed = createComputed(() => props.state.a * props.state.b)
+}
+```
+注意，`createComputed`需要传入一个函数
+
 ### anyState
 是的,单一的`rootState`非常难以管理,我们希望在任何位置都能快速的创建一个
 `State`,并提供响应式的能力,参考以下代码:

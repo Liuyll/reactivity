@@ -9,7 +9,13 @@ function registerDom() {
     setRegisterDom(true)
 }
 
-export { createRef,createWatch } from './reactivity'
+export { 
+    createRef,
+    createWatchState,
+    createWatcher,
+    createComputed 
+} from './reactivity'
+
 export {
     mixInReact,
     createState,

@@ -1,6 +1,6 @@
 import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherDepManage, PlainType, Ref } from './interface';
 import Session from './session'
-import State, { IStateOptions } from './state'
+import State, { IOnChange, IStateOptions } from './state'
 import _symbol from './symbol'
 import React = require('react')
 import { setCurrentWaitingUpdateComp,clearCurrentWaitingUpdateComp,currentWaitingUpdateComp } from '../mixInReact/mixInReact'
@@ -113,6 +113,7 @@ const ReactiveStateProxy = (state:State) => {
         },
         set(target,key,val) {
             if(origin[key] === val) return true
+            const oldVal = target[key]
             target[key] = val
             // TODO: 数组特殊处理
             enqueueWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
@@ -122,7 +123,7 @@ const ReactiveStateProxy = (state:State) => {
                 else Promise.resolve().then(() => flush())
             }
             
-            state.onchange()
+            state.onchange(target,key,oldVal,target[key])
             return true
         }
     })
@@ -238,7 +239,27 @@ export const createState = (target:object, options ?: IStateOptions):State => {
     return state
 }
 
-export const createWatch = (target:object,onchange:Function):any => {
+export const createWatcher = (target:State,key:any,onchange:IOnChange):void => {
+    if(!(target instanceof State)) {
+        console.error(
+    `call createWacher error: 
+    the first argument must be State;
+    please call createState fisltly.
+    `)
+        return 
+    }
+    const { useEffect } = realReact
+    useEffect(() => {
+        target.addOnChange(onchange,key)
+        return target.removeOnChange(onchange)
+    },[])
+}
+
+export const createComputed = (computed:Function) => {
+    return computed()
+}
+
+export const createWatchState = (target:object,onchange:Function):any => {
     const state = createState(target, { onchange })
     return (linkStateToProxy(state) as State).state
 }
