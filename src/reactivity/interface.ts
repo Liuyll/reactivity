@@ -16,12 +16,7 @@ export interface IUpdateTask {
     resolve: Resolve
 }
 
-/**
- * key: keyName 
- * val: {buildId,observer}
- */
 export interface IWatcherMap {
-    // [key:string]:Map<Function | String,Function>
     [key:string]:Map<Symbol,IWatcherPayload>
 }
 

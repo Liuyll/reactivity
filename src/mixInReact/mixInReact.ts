@@ -32,7 +32,6 @@ export default function mixInReact(React:any) {
     setRealReact(React)
     const createElement = React.createElement
     React.createElement = (h:Function | string | RCTCompType,props:object,...children:Function[] | String[]) => {
-        // 兼容生产情况下,props为null的问题
         if(!props) props = {}
         if(typeof h === 'function') props['rootState'] = rootState
 
@@ -53,13 +52,6 @@ export default function mixInReact(React:any) {
             updateContainer = h
         } else updateContainer = createUpdateContainer(states,h as (Function | string),React,shouldUpdate)
         
-        /**
-         * @param h typefunc
-         * 更新策略是:
-         * 依赖变化时产生的更新，对应组件必须强制更新。但此时父组件不要再走react的逻辑更新依赖性更新的子组件，
-         * 由依赖性更新的子组件调用forceupdate自行更新，避免导致多次更新同一组件
-         * 不是依赖变化的更新，直接走memo的shallowequal逻辑
-         */
         const ignoreRedundancyUpdate = () => {
             return () => {
                 if(!shouldUpdate.cb || shouldUpdate.cb()) return shallowEqual
@@ -94,7 +86,6 @@ function createUpdateContainer<T=Function | string>(state:State | State[],h:T,Re
         const buildCurry = (curState) => {
             let i = 0
             const newProps = {}
-            // 将props的State直接代理到state
             for(let key in props) 
                 if(props[key] instanceof State) newProps[key] = curState[i++].state
                 else newProps[key] = props[key]

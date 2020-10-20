@@ -2,11 +2,10 @@ import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherD
 import Session from './session'
 import State, { IOnChange, IStateOptions } from './state'
 import _symbol from './symbol'
-import React = require('react')
-import { setCurrentWaitingUpdateComp,clearCurrentWaitingUpdateComp,currentWaitingUpdateComp } from '../mixInReact/mixInReact'
+import { setCurrentWaitingUpdateComp } from '../mixInReact/mixInReact'
 import { noop } from '../general/tools'
 
-let realReact:React
+let realReact: any
 const collectionSession = new Session()
 const currentTaskPool = new Set()
 const oldWatcherDepManage: WatcherDepManage = new Map()
@@ -32,19 +31,14 @@ const addDepToWatcherManage = (id: Symbol, stateFlag:Symbol,state:State,key) => 
     ]))
 }
 
-// @deprecated
-const makeId = (type:Function) => type.toString()
 let transactionId:Set<Symbol> = new Set()
 let pending = false
-
 const startTransaction = () => transactionId.clear()
 const endTransaction = startTransaction
-
 const updateTask:IUpdateTask[] = []
 const clearUpdateTask = () => updateTask.length = 0
 const preUpdateTask: Function[] = []
 const clearPreUpdateTask = () => preUpdateTask.length = 0
-
 const isPlainObject = (obj:any) => obj && (typeof obj === 'object')
 
 const flush = () => {
@@ -67,7 +61,6 @@ const flush = () => {
     endTransaction()
     endPendingUpdate()
     clearTaskPool()
-    // clearCurrentWaitingUpdateComp()
 }
 
 const ReactiveStateProxy = (state:State) => {
@@ -85,7 +78,6 @@ const ReactiveStateProxy = (state:State) => {
             const currentSession = collectionSession.peer()
             if(!currentSession) return innerState[key] instanceof State ? innerState[key].state : innerState[key]
 
-            // 持有这个依赖的watcherMap
             const currentDepWatchMap = state[_symbol.watchMap] as IWatcherMap
             const watcher = currentSession.cacheFlag
             const watcherPayload:IWatcherPayload = {
@@ -96,11 +88,6 @@ const ReactiveStateProxy = (state:State) => {
                 preObserver:currentSession.preObserver,
                 afterObserver: currentSession.afterObserver
             }
-            /**
-             * string为id的watcher可能被多个相同组件覆盖
-             * 此时添加magic数字标识相同组件的不同调用
-             * 最终需要在每轮更新后清除掉对应的currentDepWatchMap
-             */
             if(!currentDepWatchMap[key]) currentDepWatchMap[key] = new Map<Symbol,IWatcherPayload>([[watcher,watcherPayload]])
             else {
                 currentDepWatchMap[key].set(watcher,watcherPayload)
@@ -115,7 +102,6 @@ const ReactiveStateProxy = (state:State) => {
             if(origin[key] === val) return true
             const oldVal = target[key]
             target[key] = val
-            // TODO: 数组特殊处理
             enqueueWatcherInUpdatePool(state, Array.isArray(target) ? null : key as string)
             if(!pending) {
                 pendingUpdate()
@@ -151,7 +137,6 @@ function clearDep(watcher:Symbol,state:State) {
 
     const curDepMap = getDepMap('cur')
     const oldDepMap = getDepMap('old')
-    // debugger;
     for(let name in oldDepMap) {
         if(!curDepMap[name]) {
             delete state[_symbol.watchMap][name]
@@ -162,10 +147,8 @@ function clearDep(watcher:Symbol,state:State) {
 
 function clearAllDep(watcher:Symbol) {
     let depStates = oldWatcherDepManage.get(watcher)
-   
     if(depStates) for(let state of depStates) clearDep(watcher,state[1][_symbol.state] as State)
     else oldWatcherDepManage.set(watcher,curWatcherDepManage.get(watcher))
-    
     curWatcherDepManage.set(watcher,null)
 }
 
@@ -174,7 +157,6 @@ function endPendingUpdate() { pending = false }
 
 function enqueueWatcherInUpdatePool(state:State, name?:string) {
     const watchers = state[_symbol.watchMap] as IWatcherMap
-    // debugger;
     for(const key in watchers) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
@@ -184,15 +166,12 @@ function enqueueWatcherInUpdatePool(state:State, name?:string) {
                 updateTask.push({task: watcher.observer, id,resolve:watcher.resolve})
                 currentTaskPool.add(id)
             })
-            // 使用的是不同的typefunc进行缓存，需要清理上一轮储存的依赖
-            // 不清理watchers会内存泄漏
             watchers[key] = new Map()
         }
     }
 }
 
-export const setRealReact = (React:React) => realReact = React
-// preObserver afterObserver暂时不需要使用
+export const setRealReact = (React) => realReact = React
 export const collectionDep = (build:Function,state:State | State[],observer ?: Function, cacheFlag ?: Symbol, preObserver ?: Function, afterObserver ?: Function) => {
     let resolve
     state = linkStateToProxy(state)
@@ -206,7 +185,6 @@ export const collectionDep = (build:Function,state:State | State[],observer ?: F
     }
     
     beforeCollection(collectionPayload)
-    // debugger;
     const ret = beginCollection(() => build(state),collectionPayload)
     endCollection()
     clearAllDep(cacheFlag)
