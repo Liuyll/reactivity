@@ -1,9 +1,6 @@
-export function useForceUpdate(React) {
-    const { useState } = React
-    // const [_,forceUpdate] = useReducer(state => {
-    //     return ++state.a
-    // },{a:1})
-    // return forceUpdate
+export function useForceUpdate(React,debug ?: any) {
+    debug && console.log('forceUpdate:',debug)
+    const { useState,useCallback } = React
     const [_,forceUpdate] = useState(0)
-    return () => forceUpdate(s => s+1)
+    return useCallback(() => forceUpdate(s => s+1),[])
 }

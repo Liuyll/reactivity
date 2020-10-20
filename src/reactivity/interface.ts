@@ -4,12 +4,14 @@ export interface ICollectionPayload {
     build: Function,
     observer: Function,
     resolve ?: Resolve,
-    cacheFunc ?: Function
+    cacheFlag ?: Symbol,
+    preObserver ?: Function,
+    afterObserver ?: Function
 }
 
 export interface IUpdateTask {
     // toString id
-    id: Function | String,
+    id: Symbol,
     task: Function,
     resolve: Resolve
 }
@@ -20,17 +22,19 @@ export interface IUpdateTask {
  */
 export interface IWatcherMap {
     // [key:string]:Map<Function | String,Function>
-    [key:string]:Map<Function | String,IWatcherPayload>
+    [key:string]:Map<Symbol,IWatcherPayload>
 }
 
 export interface IWatcherPayload {
     observer: Function,
     resolve: Resolve,
     build ?: Function,
-    cacheFunc ?: Function
+    cacheFlag ?: Symbol,
+    preObserver ?: Function,
+    afterObserver ?: Function
 }
 
-export type WatcherDepManage = Map<Function | String,Map<Symbol,object>>
+export type WatcherDepManage = Map<Symbol,Map<Symbol,object>>
 export type PlainType = string | boolean | number | bigint
 export type Ref<T extends PlainType> = {
     value: T

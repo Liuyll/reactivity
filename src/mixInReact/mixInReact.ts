@@ -3,7 +3,7 @@ import { rootState } from './createState';
 import { useForceUpdate } from './hooks' 
 import State from '../reactivity/state'
 import { collectionDep, setRealReact } from '../reactivity'
-import { shallowEqual } from '../dom/tools'
+import { shallowEqual } from '../general/tools'
 
 interface RCTCompType {
     $$typeof: Symbol,
@@ -14,10 +14,13 @@ function isRCTCompType(comp:Function | string | RCTCompType): comp is RCTCompTyp
     return !!(comp as RCTCompType).$$typeof
 }
 
-export const currentWaitingUpdateComp:Map<Function,boolean> = new Map()
+export const currentWaitingUpdateComp:Map<Symbol,boolean> = new Map()
 const containerMap = new WeakMap()
 
-export function setCurrentWaitingUpdateComp(h:Function) {
+export function deleteCurrentWaitingUpdateComp(h: Symbol) {
+    currentWaitingUpdateComp.set(h,false)
+}
+export function setCurrentWaitingUpdateComp(h:Symbol) {
     currentWaitingUpdateComp.set(h,true)
 }
 
@@ -42,30 +45,33 @@ export default function mixInReact(React:any) {
         }
 
         let updateContainer:RCTCompType | Function | string
+        const shouldUpdate = {
+            cb: null
+        }
         if(isRCTCompType(h)) {
-            h.type = createUpdateContainer(states,(h as RCTCompType).type,React)
+            h.type = createUpdateContainer(states,(h as RCTCompType).type,React,shouldUpdate)
             updateContainer = h
-        } else updateContainer = createUpdateContainer(states,h as (Function | string),React)
+        } else updateContainer = createUpdateContainer(states,h as (Function | string),React,shouldUpdate)
         
         /**
          * @param h typefunc
          * 更新策略是:
-         * 依赖性更新，对应组件必须强制更新。但此时父组件不要再走react的逻辑更新依赖性更新的子组件，
+         * 依赖变化时产生的更新，对应组件必须强制更新。但此时父组件不要再走react的逻辑更新依赖性更新的子组件，
          * 由依赖性更新的子组件调用forceupdate自行更新，避免导致多次更新同一组件
+         * 不是依赖变化的更新，直接走memo的shallowequal逻辑
          */
-        const ignoreRedundancyUpdate = (h:Function) => {
+        const ignoreRedundancyUpdate = () => {
             return () => {
-                if(currentWaitingUpdateComp.get(h)) return true
-                return shallowEqual
+                if(!shouldUpdate.cb || shouldUpdate.cb()) return shallowEqual
+                else if(!shouldUpdate.cb()) return true
             } 
         }
 
         if(typeof h !== 'string' && typeof updateContainer !== 'string') {
             if(containerMap.get(h)) updateContainer = containerMap.get(h)
             else if(React.memo) {
-                const rawUpdateContainer:Function = isRCTCompType(updateContainer) ? updateContainer.type : updateContainer
-                if(isRCTCompType(updateContainer)) updateContainer.type = React.memo(updateContainer.type,ignoreRedundancyUpdate(rawUpdateContainer)) 
-                updateContainer = React.memo(updateContainer,ignoreRedundancyUpdate(rawUpdateContainer))
+                if(isRCTCompType(updateContainer)) updateContainer.type = React.memo(updateContainer.type,ignoreRedundancyUpdate()) 
+                updateContainer = React.memo(updateContainer,ignoreRedundancyUpdate())
                 containerMap.set(h,updateContainer)
             }
         }
@@ -74,15 +80,18 @@ export default function mixInReact(React:any) {
     }
 }
  
-function createUpdateContainer<T=Function | string>(state:State | State[],h:T,React:any):T {
+function createUpdateContainer<T=Function | string>(state:State | State[],h:T,React:any,shouldUpdate ?: any):T {
     if(typeof h !== 'function') return h
     const build = h
-    
-    const typeFunc = (props:object,children ?: Array<Function>) => {
-        // console.log('update:',h)
-        const buildCurry = (curState) => {
-            // React.useEffect(() => {},[])
 
+    const typeFunc = (props:object,children ?: Array<Function>) => {
+        const { useRef, useEffect } = React
+        const cacheFlag = useRef(Symbol())
+        useEffect(() => {
+            deleteCurrentWaitingUpdateComp(cacheFlag)
+        })
+
+        const buildCurry = (curState) => {
             let i = 0
             const newProps = {}
             // 将props的State直接代理到state
@@ -90,13 +99,13 @@ function createUpdateContainer<T=Function | string>(state:State | State[],h:T,Re
                 if(props[key] instanceof State) newProps[key] = curState[i++].state
                 else newProps[key] = props[key]
             props = newProps
-
             return build.apply(null,[props,children])
         }
 
         const forceUpdate = useForceUpdate(React)
-        setStringId(buildCurry,h.toString())
-        return collectionDep(buildCurry,state,forceUpdate,typeFunc)
+        setStringId(buildCurry,build.toString())
+        if(shouldUpdate) shouldUpdate.cb = () => !currentWaitingUpdateComp.get(cacheFlag)
+        return collectionDep(buildCurry,state,forceUpdate,cacheFlag)
     } 
     
     if(isRegisterDom) typeFunc.__rawTypeFn = h.toString()

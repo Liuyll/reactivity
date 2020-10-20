@@ -1,7 +1,7 @@
 import { IWatcherMap } from './interface'
 import _Symbol from './symbol'
 
-interface IStateOptions {
+export interface IStateOptions {
     parentState ?: State,
     onchange ?: Function
 }

@@ -9,6 +9,10 @@ function is(x, y) {
   }
 }
 
+function isDep(x,y) {
+  return (typeof x === 'object' && typeof y === 'object') ? shallowEqual(x,y) : is(x,y)
+}
+
 export function isPrimitive (value) {
     return (
         typeof value === 'string' ||
@@ -23,7 +27,7 @@ export function camel2hyphen(s:string) {
     return s.replace(/([A-Z])/g,'_$1').toLowerCase()
 }
 
-export function shallowEqual(objA, objB) {
+export function shallowEqual(objA, objB, isDev=false) {
   if (is(objA, objB)) return true
 
   if (typeof objA !== 'object' || objA === null ||
@@ -38,7 +42,7 @@ export function shallowEqual(objA, objB) {
 
   for (let i = 0; i < keysA.length; i++) {
     if (!hasOwn.call(objB, keysA[i]) ||
-        !is(objA[keysA[i]], objB[keysA[i]])) {
+        !(isDev ? isDep : is)(objA[keysA[i]], objB[keysA[i]])) {
       return false
     }
   }
