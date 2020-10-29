@@ -1,8 +1,13 @@
 ## reactivity
 一个数据驱动的响应核心
 
-注:本仓库只是statelink的响应核心,并且提供最小可运行单元.
-statelink暂不对外开源.
+> 本仓库并不提供独立的dom操作库，只提供连接符合dom接口(`react`标准)规范的dom库的嵌入api。
+
+如果你想使用现成的框架，可以移步[limbo](https://github.com/Liuyll/limbo)(一个集成了调度和事件系统的高性能现代前端框架)。并且使用我们提供的`mixInReact`来注册`limbo`。
+
+如果你想使用符合规范的其他框架，请使用`reactivity/register`进行注册。
+
+当然，最方便的还是使用我们提供的`reabo`来作为独立的`mvvm`框架使用。(实际上，它就是通过`reactivity/register`注册了`limbo`)
 
 ## install
 ```
