@@ -9,18 +9,31 @@ function registerDom() {
     setRegisterDom(true)
 }
 
-export { 
+import {
     createRef,
     createWatchState,
     createWatcher,
-    createComputed 
+    createComputed, 
 } from './reactivity'
+
+const useWatchState = createWatchState,
+    useWatcher = createWatcher,
+    useComputed = createComputed,
+    useReactivityRef = createRef
 
 export {
     mixInReact,
     createState,
     setRootState,
-    registerDom
+    registerDom,
+    createRef,
+    createWatchState,
+    createWatcher,
+    createComputed, 
+    useWatchState,
+    useWatcher,
+    useComputed,
+    useReactivityRef
 }
 
 export * from './dom'
