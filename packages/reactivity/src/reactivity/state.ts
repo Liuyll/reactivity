@@ -1,7 +1,10 @@
 import { IWatcherMap } from './interface'
 import _Symbol from './symbol'
 
-interface IStateOptions {
+export interface IOnChange {
+    (newState: object, oldValue ?: any, newValue ?: any, changeKey ?: any): void
+}
+export interface IStateOptions {
     parentState ?: State,
     onchange ?: Function
 }
@@ -9,16 +12,15 @@ export default class State {
     private _watchMap : IWatcherMap = {}
     private _flag:Symbol = Symbol()
     private _parentState:State
-    private _onchange: Function | null
+    private _onchange: Set<Function> = new Set()
 
     public origin
     public state
 
-
     constructor(state,options?:IStateOptions) {
         this.state = state
         this.origin = state
-        this._onchange = options?.onchange
+        if(options ?. onchange) this._onchange.add(options.onchange)
         if(options?.parentState) this._parentState = options.parentState
 
         for(let key in state) {
@@ -28,8 +30,23 @@ export default class State {
         }
     }
 
-    onchange() {
-        this._onchange && typeof this._onchange === 'function' && this._onchange()
+    convertChangeKey(newState:object,key:any,oldValue:any,newValue:any) {
+        return [newState,oldValue,newValue,key]
+    }
+
+    onchange(...argument: any[]) {
+        this._onchange.forEach(rct => typeof rct === 'function' && rct(...argument))
+    }
+
+    addOnChange(rct:IOnChange,key ?: any) {
+        const _rct = (newState:object,updateKey:any,oldValue:any,newValue:any) => {
+            if(!key || updateKey === key) rct(newState,oldValue,newValue)
+        }
+        this._onchange.add(_rct)
+    }
+
+    removeOnChange(rct:Function) {
+        this._onchange.delete(rct)
     }
 
     get [_Symbol.flag]() {

@@ -1,19 +1,37 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.clearCurrentWaitingUpdateComp = exports.setCurrentWaitingUpdateComp = exports.deleteCurrentWaitingUpdateComp = exports.currentWaitingUpdateComp = void 0;
 const config_1 = require("./../config");
 const createState_1 = require("./createState");
 const hooks_1 = require("./hooks");
-const state_1 = __importDefault(require("../reactivity/state"));
+const state_1 = require("../reactivity/state");
 const reactivity_1 = require("../reactivity");
+const tools_1 = require("../general/tools");
+function isRCTCompType(comp) {
+    return !!comp.$$typeof;
+}
+exports.currentWaitingUpdateComp = new Map();
+const containerMap = new WeakMap();
+function deleteCurrentWaitingUpdateComp(h) {
+    exports.currentWaitingUpdateComp.set(h, false);
+}
+exports.deleteCurrentWaitingUpdateComp = deleteCurrentWaitingUpdateComp;
+function setCurrentWaitingUpdateComp(h) {
+    exports.currentWaitingUpdateComp.set(h, true);
+}
+exports.setCurrentWaitingUpdateComp = setCurrentWaitingUpdateComp;
+function clearCurrentWaitingUpdateComp() {
+    exports.currentWaitingUpdateComp.clear();
+}
+exports.clearCurrentWaitingUpdateComp = clearCurrentWaitingUpdateComp;
 function mixInReact(React) {
+    reactivity_1.setRealReact(React);
     const createElement = React.createElement;
     React.createElement = (h, props, ...children) => {
+        if (!props)
+            props = {};
         if (typeof h === 'function')
             props['rootState'] = createState_1.rootState;
-        // let states = [...rootState ? [rootState] : []]
         const states = [];
         for (const key in props) {
             const prop = props[key];
@@ -21,34 +39,68 @@ function mixInReact(React) {
                 states.push(prop);
             }
         }
-        const updateContainer = createUpdateContainer(states, h, React);
+        let updateContainer;
+        const shouldUpdate = {
+            cb: null
+        };
+        if (isRCTCompType(h)) {
+            h.type = createUpdateContainer(states, h.type, React, shouldUpdate);
+            updateContainer = h;
+        }
+        else
+            updateContainer = createUpdateContainer(states, h, React, shouldUpdate);
+        const ignoreRedundancyUpdate = () => {
+            return () => {
+                if (!shouldUpdate.cb || shouldUpdate.cb())
+                    return tools_1.shallowEqual;
+                else if (!shouldUpdate.cb())
+                    return true;
+            };
+        };
+        if (typeof h !== 'string' && typeof updateContainer !== 'string') {
+            if (containerMap.get(h))
+                updateContainer = containerMap.get(h);
+            else if (React.memo) {
+                if (isRCTCompType(updateContainer))
+                    updateContainer.type = React.memo(updateContainer.type, ignoreRedundancyUpdate());
+                updateContainer = React.memo(updateContainer, ignoreRedundancyUpdate());
+                containerMap.set(h, updateContainer);
+            }
+        }
         return createElement.apply(React, [updateContainer, props, ...children]);
     };
 }
 exports.default = mixInReact;
-function createUpdateContainer(state, h, React) {
+function createUpdateContainer(state, h, React, shouldUpdate) {
     if (typeof h !== 'function')
         return h;
     const build = h;
-    const { memo } = React;
     const typeFunc = (props, children) => {
+        const { useRef, useEffect } = React;
+        const cacheFlag = useRef(Symbol());
+        useEffect(() => {
+            deleteCurrentWaitingUpdateComp(cacheFlag);
+        });
         const buildCurry = (curState) => {
             let i = 0;
             const newProps = {};
             for (let key in props)
                 if (props[key] instanceof state_1.default)
                     newProps[key] = curState[i++].state;
+                else
+                    newProps[key] = props[key];
             props = newProps;
             return build.apply(null, [props, children]);
         };
         const forceUpdate = hooks_1.useForceUpdate(React);
-        // const v = React.useMemo(() => collectionDep(buildCurry,state,forceUpdate))
-        setStringId(buildCurry, h.toString());
-        return reactivity_1.collectionDep(buildCurry, state, forceUpdate);
+        setStringId(buildCurry, build.toString());
+        if (shouldUpdate)
+            shouldUpdate.cb = () => !exports.currentWaitingUpdateComp.get(cacheFlag);
+        return reactivity_1.collectionDep(buildCurry, state, forceUpdate, cacheFlag);
     };
     if (config_1.isRegisterDom)
         typeFunc.__rawTypeFn = h.toString();
-    return memo ? memo(typeFunc) : typeFunc;
+    return typeFunc;
 }
 function setStringId(target, id) {
     return target.toString = () => id;

@@ -9,7 +9,7 @@ declare module window {
 
 export let rootState
 
-export function createState(target:object) {
+export function createState(target:object,React ?: any) {
     if(target instanceof State) return target
     return _createState(target)
 }
