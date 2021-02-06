@@ -3,7 +3,7 @@ import Session from './session'
 import State, { IOnChange, IStateOptions } from './state'
 import _symbol from './symbol'
 import React = require('react')
-import { setCurrentWaitingUpdateComp,clearCurrentWaitingUpdateComp,currentWaitingUpdateComp } from '../mixInReact/mixInReact'
+import { setCurrentWaitingUpdateComp } from '../mixInReact/mixInReact'
 import { noop } from '../general/tools'
 
 let realReact:React

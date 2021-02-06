@@ -85,10 +85,16 @@ function createUpdateContainer<T=Function | string>(state:State | State[],h:T,Re
     const build = h
 
     const typeFunc = (props:object,children ?: Array<Function>) => {
-        const { useRef, useEffect } = React
+        const { useRef, useEffect, useLayoutEffect } = React
         const cacheFlag = useRef(Symbol())
-        useEffect(() => {
+        const updateCache = useRef(false)
+        // 避免effect延迟
+        useLayoutEffect(() => {
             deleteCurrentWaitingUpdateComp(cacheFlag)
+            if(updateCache.current) {
+                updateCache.current = false
+                forceUpdate()
+            }
         })
 
         const buildCurry = (curState) => {
@@ -104,7 +110,11 @@ function createUpdateContainer<T=Function | string>(state:State | State[],h:T,Re
 
         const forceUpdate = useForceUpdate(React)
         setStringId(buildCurry,build.toString())
-        if(shouldUpdate) shouldUpdate.cb = () => !currentWaitingUpdateComp.get(cacheFlag)
+        if(shouldUpdate) shouldUpdate.cb = () => {
+            // 标志延迟更新
+            if(!updateCache.current) updateCache.current = true
+            return !currentWaitingUpdateComp.get(cacheFlag)
+        }
         return collectionDep(buildCurry,state,forceUpdate,cacheFlag)
     } 
     
