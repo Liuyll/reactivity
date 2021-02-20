@@ -1,6 +1,9 @@
 {
-  "name": "@limbo/reactivity",
-  "main": "lib",
+  "name": "limbo-reactivity",
+  "version": "1.0",
+  "main": "lib/index.js",
+  "author": "liuyll",
+  "repository": "github.com/liuyll/reactivity",
   "scripts": {
     "build": "tsc"
   }
