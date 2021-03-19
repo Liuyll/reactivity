@@ -5,6 +5,8 @@ import _symbol from './symbol'
 import React = require('react')
 import { setCurrentWaitingUpdateComp } from '../mixInReact/mixInReact'
 import { noop } from '../general/tools'
+import { isDevtools } from '../devtools';
+import { clearStoreToDevtools, getStoreAndPath, notifyMutationToDevtools, sendStoreToDevTools } from '../devtools/message';
 
 let realReact:React
 const collectionSession = new Session()
@@ -78,7 +80,7 @@ const ReactiveStateProxy = (state:State) => {
     const innerState = state.state
     const stateFlag = state[_symbol.flag] as Symbol
     
-    let proxyState = new Proxy(origin,{
+    let proxyState = new Proxy(origin, {
         get(target,key:any){
             if(key === 'origin') return origin
             if(key === _symbol.proxy2state) return state
@@ -108,11 +110,10 @@ const ReactiveStateProxy = (state:State) => {
 
             addDepToWatcherManage(watcher,stateFlag,state,key)
             if(isPlainObject(target[key])) return (innerState[key] = ReactiveStateProxy(innerState[key])).state
-
             return target[key]
         },
         set(target,key,val) {
-            if(origin[key] === val) return true
+            if(target[key] === val) return true
             const oldVal = target[key]
             target[key] = val
             // TODO: 数组特殊处理
@@ -123,6 +124,18 @@ const ReactiveStateProxy = (state:State) => {
                 else Promise.resolve().then(() => flush())
             }
             
+            // devtools
+            const [store, path] = getStoreAndPath(state.path, String(key))
+            if(isDevtools) {
+                notifyMutationToDevtools({
+                    store,
+                    old: oldVal,
+                    cur: val,
+                    path: path,
+                    state: target
+                })
+            }
+            // devtools
             state.onchange(target,key,oldVal,target[key])
             return true
         }
@@ -230,9 +243,22 @@ export const createRef = <T extends PlainType = PlainType> (val:T,options ?: ISt
     return (linkStateToProxy(state) as State).state
 }
 
-export const createState = (target:object, options ?: IStateOptions):State => {
-    const state = new State(target,options)
+export const createState = (target:Object, options ?: IStateOptions):State => {
+    const state = new State(target, options)
+    const name = options?.name??String(Math.random())
     if(collectionSession.isCollecting()) {
+        if(isDevtools) {
+            const { useEffect } = realReact
+            useEffect(() => {
+                sendStoreToDevTools({
+                    name,
+                    state: target
+                })
+                return () => {
+                    clearStoreToDevtools(name)
+                }
+            }, []) 
+        }
         const reactivityState = linkStateToProxy(state)
         return realReact.useRef(reactivityState).current
     }

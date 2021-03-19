@@ -6,26 +6,35 @@ export interface IOnChange {
 }
 export interface IStateOptions {
     parentState ?: State,
-    onchange ?: Function
+    onchange ?: Function,
+    /**
+     * devtools path and storeName
+     */
+    path ?: string[],
+    name ?: string
 }
 export default class State {
     private _watchMap : IWatcherMap = {}
     private _flag:Symbol = Symbol()
     private _parentState:State
     private _onchange: Set<Function> = new Set()
-
+    
+    public path
     public origin
     public state
 
-    constructor(state,options?:IStateOptions) {
+    constructor(state: Object, options?:IStateOptions) {
         this.state = state
         this.origin = state
-        if(options ?. onchange) this._onchange.add(options.onchange)
+        if(options?.name) this.path = [options.name]
+        if(options?.path) this.path = options.path
+        if(options?.onchange) this._onchange.add(options.onchange)
         if(options?.parentState) this._parentState = options.parentState
 
         for(let key in state) {
             if(typeof state[key] === 'object') this.state[key] = new State(state[key],{
-                parentState : this
+                parentState : this,
+                path: this.path ? this.path.slice().concat([key]) : null
             })
         }
     }

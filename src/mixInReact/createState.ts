@@ -1,6 +1,6 @@
 
 import { createState as _createState} from './../reactivity/index';
-import State from '../reactivity/state'
+import State, { IStateOptions } from '../reactivity/state'
 
 declare module window {
     export let gg
@@ -9,9 +9,9 @@ declare module window {
 
 export let rootState
 
-export function createState(target:object,React ?: any) {
+export function createState(target:object,options ?: IStateOptions) {
     if(target instanceof State) return target
-    return _createState(target)
+    return _createState(target, options)
 }
 
 export function setRootState(state:State) {
