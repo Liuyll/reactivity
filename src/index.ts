@@ -35,5 +35,3 @@ export {
     useComputed,
     useReactivityRef
 }
-
-export * from './dom'
