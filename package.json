@@ -6,5 +6,8 @@
   "repository": "github.com/liuyll/reactivity",
   "scripts": {
     "build": "tsc"
+  },
+  "peerDependencies": {
+    "react": "^16.13.1"
   }
 }
