@@ -243,9 +243,10 @@ export const createRef = <T extends PlainType = PlainType> (val:T,options ?: ISt
     return (linkStateToProxy(state) as State).state
 }
 
-export const createState = (target:Object, options ?: IStateOptions):State => {
+export const createState = (target:Object, options : IStateOptions = {}):State => {
+    const name = options.name = options?.name??String(Math.random())
     const state = new State(target, options)
-    const name = options?.name??String(Math.random())
+    
     if(collectionSession.isCollecting()) {
         if(isDevtools) {
             const { useEffect } = realReact
