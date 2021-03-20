@@ -2,7 +2,6 @@ import { ICollectionPayload, IUpdateTask, IWatcherMap, IWatcherPayload, WatcherD
 import Session from './session'
 import State, { IOnChange, IStateOptions } from './state'
 import _symbol from './symbol'
-import { setCurrentWaitingUpdateComp } from '../mixInReact/mixInReact'
 import { noop } from '../general/tools'
 
 let realReact: any
@@ -161,9 +160,8 @@ function enqueueWatcherInUpdatePool(state:State, name?:string) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
             keyWatchers.forEach((watcher:IWatcherPayload,id: Symbol) => {
-                setCurrentWaitingUpdateComp(watcher.cacheFlag)
                 preUpdateTask.push(watcher.preObserver)
-                updateTask.push({task: watcher.observer, id,resolve:watcher.resolve})
+                updateTask.push({task: watcher.observer, id, resolve:watcher.resolve})
                 currentTaskPool.add(id)
             })
             watchers[key] = new Map()
