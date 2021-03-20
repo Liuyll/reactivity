@@ -3,7 +3,6 @@ import Session from './session'
 import State, { IOnChange, IStateOptions } from './state'
 import _symbol from './symbol'
 import React = require('react')
-import { setCurrentWaitingUpdateComp } from '../mixInReact/mixInReact'
 import { noop } from '../general/tools'
 import { isDevtools } from '../devtools';
 import { clearStoreToDevtools, getStoreAndPath, notifyMutationToDevtools, sendStoreToDevTools } from '../devtools/message';
@@ -192,9 +191,8 @@ function enqueueWatcherInUpdatePool(state:State, name?:string) {
         if(key === name || !name) {
             const keyWatchers = watchers[key]
             keyWatchers.forEach((watcher:IWatcherPayload,id: Symbol) => {
-                setCurrentWaitingUpdateComp(watcher.cacheFlag)
                 preUpdateTask.push(watcher.preObserver)
-                updateTask.push({task: watcher.observer, id,resolve:watcher.resolve})
+                updateTask.push({task: watcher.observer, id, resolve:watcher.resolve})
                 currentTaskPool.add(id)
             })
             // 使用的是不同的typefunc进行缓存，需要清理上一轮储存的依赖
